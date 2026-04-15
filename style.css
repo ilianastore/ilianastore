@@ -638,7 +638,12 @@ img {
 
 .mosaic-main img,
 .mosaic-sm img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
     transition: transform .6s ease;
+    contain: content;
 }
 
 .mosaic-main:hover img,
@@ -778,11 +783,42 @@ img {
     cursor: pointer;
     box-shadow: var(--shadow-sm);
     transition: transform .4s var(--ease), box-shadow .4s ease;
+    /* Shimmer animation on background while loading */
+    background: linear-gradient(90deg, #f8d0e2 0%, #fce8f2 40%, #f0b8cc 70%, #fce8f2 100%);
+    background-size: 300% 100%;
+    animation: gItemShimmer 1.8s ease-in-out infinite;
+}
+
+/* Stop shimmer once image has loaded */
+.gitem.loaded {
+    animation: none;
     background: var(--pink-pale);
 }
 
+@keyframes gItemShimmer {
+    0%   { background-position: 100% 0; }
+    50%  { background-position: 0%   0; }
+    100% { background-position: 100% 0; }
+}
+
+/* Gallery item image */
 .gitem img {
-    transition: transform .6s ease;
+    transition: transform .6s ease, opacity .35s ease;
+}
+
+/* Hide image while loading, fade in when ready */
+.gitem img.img-loading {
+    opacity: 0;
+}
+.gitem img.img-loaded {
+    opacity: 1;
+}
+
+/* Skeleton placeholder cards (injected while API loads) */
+.gitem-placeholder {
+    cursor: default !important;
+    pointer-events: none;
+    box-shadow: none !important;
 }
 
 .ghover {
@@ -1208,7 +1244,60 @@ img {
     object-fit: contain;
     border-radius: var(--r-md);
     box-shadow: 0 40px 80px rgba(0, 0, 0, .6);
-    transition: opacity .25s;
+    transition: opacity .35s ease;
+}
+
+/* ── Lightbox loading spinner ── */
+.lb-spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    pointer-events: none;
+    transition: opacity .25s ease;
+}
+
+.lb-spinner-ring {
+    width: 52px;
+    height: 52px;
+    border: 4px solid rgba(255, 255, 255, .15);
+    border-top-color: #EAC0D0;
+    border-right-color: #D98FA0;
+    border-radius: 50%;
+    animation: lbSpin .9s linear infinite;
+}
+
+@keyframes lbSpin {
+    to { transform: rotate(360deg); }
+}
+
+.lb-spinner p {
+    color: rgba(255, 255, 255, .55);
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.lb-spinner.hide {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lightbox.is-loading .lb-content img {
+    opacity: 0;
+}
+
+.lightbox.is-loading .lb-spinner {
+    opacity: 1;
+}
+
+.lightbox:not(.is-loading) .lb-spinner {
+    opacity: 0;
 }
 
 .lb-caption {
@@ -2367,8 +2456,8 @@ img {
 
 .queue-table thead tr {
     background: linear-gradient(135deg,
-        rgba(245, 215, 228, 0.6),
-        rgba(235, 200, 215, 0.4));
+            rgba(245, 215, 228, 0.6),
+            rgba(235, 200, 215, 0.4));
     border-bottom: 1.5px solid rgba(220, 180, 200, 0.4);
 }
 
@@ -2407,23 +2496,42 @@ img {
 .queue-table tbody tr.row-doing {
     background: rgba(255, 235, 200, 0.25);
 }
+
 .queue-table tbody tr.row-doing:hover {
     background: rgba(255, 235, 200, 0.4);
 }
+
 .queue-table tbody tr.row-done {
     opacity: .55;
 }
+
 .queue-table tbody tr.row-done td {
     text-decoration: line-through;
     text-decoration-color: rgba(180, 130, 150, 0.5);
 }
 
 /* Column widths */
-.col-num    { width: 50px; }
-.col-name   { min-width: 120px; }
-.col-type   { min-width: 120px; }
-.col-status { width: 130px; }
-.col-note   { min-width: 100px; color: var(--text-soft); font-size: .78rem; }
+.col-num {
+    width: 50px;
+}
+
+.col-name {
+    min-width: 120px;
+}
+
+.col-type {
+    min-width: 120px;
+}
+
+.col-status {
+    width: 130px;
+}
+
+.col-note {
+    min-width: 100px;
+    color: var(--text-soft);
+    font-size: .78rem;
+}
 
 /* Queue number badge */
 .q-num {
@@ -2440,7 +2548,9 @@ img {
 }
 
 /* Queue name */
-.q-name { font-weight: 700; }
+.q-name {
+    font-weight: 700;
+}
 
 /* Status badges */
 .q-badge {
@@ -2498,24 +2608,49 @@ img {
     color: var(--text-soft);
 }
 
-.queue-empty.hide { display: none !important; }
-.queue-content.hide { display: none !important; }
+.queue-empty.hide {
+    display: none !important;
+}
+
+.queue-content.hide {
+    display: none !important;
+}
 
 /* ── Mobile Queue — Fix cutting/overflow ── */
 @media (max-width: 768px) {
+
     .queue-table th,
     .queue-table td {
-        padding: 10px 8px; /* Reduce horizontal padding */
-        font-size: .76rem;   /* Slightly smaller font */
-        white-space: nowrap; /* Prevent text wrapping to keep rows tidy */
+        padding: 10px 8px;
+        /* Reduce horizontal padding */
+        font-size: .76rem;
+        /* Slightly smaller font */
+        white-space: nowrap;
+        /* Prevent text wrapping to keep rows tidy */
     }
 
     /* Fixed widths on mobile to keep structure */
-    .col-num    { width: 40px !important; }
-    .col-name   { min-width: 100px !important; }
-    .col-type   { min-width: 110px !important; }
-    .col-status { width: 100px !important; }
-    .col-note   { min-width: 120px !important; } /* Show note again */
+    .col-num {
+        width: 40px !important;
+    }
+
+    .col-name {
+        min-width: 100px !important;
+    }
+
+    .col-type {
+        min-width: 110px !important;
+    }
+
+    .col-status {
+        width: 100px !important;
+    }
+
+    .col-note {
+        min-width: 120px !important;
+    }
+
+    /* Show note again */
 
     .q-num {
         width: 24px;
@@ -2544,12 +2679,10 @@ img {
 
 /* ── Lazy Load — Placeholder & Fade-in ── */
 img.lazy {
-    background: linear-gradient(
-        90deg,
-        rgba(245, 220, 228, 0.5) 25%,
-        rgba(255, 240, 245, 0.8) 50%,
-        rgba(245, 220, 228, 0.5) 75%
-    );
+    background: linear-gradient(90deg,
+            rgba(245, 220, 228, 0.5) 25%,
+            rgba(255, 240, 245, 0.8) 50%,
+            rgba(245, 220, 228, 0.5) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.4s infinite linear;
     min-height: 80px;
@@ -2560,8 +2693,13 @@ img.lazy[src=""] {
 }
 
 @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 /* Fade in once loaded */
@@ -2637,5 +2775,3 @@ img.lazy:not([src=""]) {
         height: 42px;
     }
 }
-
-
