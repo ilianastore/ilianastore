@@ -1,6 +1,56 @@
 'use strict';
 
 // ══════════════════════════════════════
+// WEB WORKER for Gallery Loading (non-blocking)
+// ──────────────────────────────────────
+var _galleryWorker = null;
+
+function initGalleryWorker() {
+    if (typeof Worker === 'undefined') return; // Browsers without Worker support
+    try {
+        _galleryWorker = new Worker('gallery-worker.js');
+        _galleryWorker.addEventListener('message', function(event) {
+            handleWorkerMessage(event.data);
+        });
+        // Send script URL to worker
+        if (typeof SCRIPT_URL !== 'undefined') {
+            _galleryWorker.postMessage({
+                type: 'set-url',
+                url: SCRIPT_URL
+            });
+        }
+    } catch (e) {
+        console.warn('Web Worker not available, using main thread');
+    }
+}
+
+function handleWorkerMessage(msg) {
+    if (msg.type === 'success') {
+        showGalleryLoading(false);
+        saveGalleryCache(msg.categories);
+        applyGalleryData(msg.categories);
+    } else if (msg.type === 'error') {
+        showGalleryLoading(false);
+        if (Object.keys(driveData).length === 0) {
+            showGalleryError('Could not load gallery: ' + msg.error);
+        }
+    }
+}
+
+function fetchGalleryInWorker(showLoader) {
+    if (showLoader) showGalleryLoading(true);
+    hideGalleryError();
+    
+    if (_galleryWorker) {
+        // Use worker if available
+        _galleryWorker.postMessage({ type: 'fetch-gallery' });
+    } else {
+        // Fallback to main thread
+        fetchGalleryFromNetwork(showLoader);
+    }
+}
+
+// ══════════════════════════════════════
 // LIGHTBOX STATE
 // ──────────────────────────────────────
 var lbItems = [];
@@ -26,7 +76,7 @@ function initLazyObserver() {
             }
         });
     }, {
-        rootMargin: '200px 0px',   // start loading 200px before entering viewport
+        rootMargin: '500px 0px',   // start loading 500px before entering viewport
         threshold: 0
     });
 }
@@ -43,12 +93,18 @@ function forceLoadImg(img) {
     var src = img.getAttribute('data-src');
     var fallback = img.getAttribute('data-fallback');
     if (!src) return;
+    img.classList.add('img-loading');
     img.src = src;
     img.removeAttribute('data-src');
+    img.onload = function () {
+        img.classList.remove('img-loading');
+        img.classList.add('img-loaded');
+        if (img.parentElement) img.parentElement.classList.add('loaded'); // hide shimmer
+    };
     img.onerror = function () {
-        if (fallback) {
-            img.src = fallback;
-        }
+        if (fallback) img.src = fallback;
+        img.classList.remove('img-loading');
+        if (img.parentElement) img.parentElement.classList.add('loaded');
         img.onerror = null;
     };
 }
@@ -60,32 +116,99 @@ function forceLoadImg(img) {
 // Holds the full category data from API: { FolderName: { _images:[], _subs:{} } }
 var driveData = {};
 
+var GALLERY_CACHE_KEY = 'june_gallery_cache';
+var GALLERY_CACHE_TTL = 120 * 60 * 1000; // 2 hours — longer cache = faster load
+
+function saveGalleryCache(categories) {
+    try {
+        localStorage.setItem(GALLERY_CACHE_KEY, JSON.stringify({
+            ts: Date.now(),
+            categories: categories
+        }));
+    } catch (e) { /* storage full or private mode */ }
+}
+
+function loadGalleryCache() {
+    try {
+        var raw = localStorage.getItem(GALLERY_CACHE_KEY);
+        if (!raw) return null;
+        var obj = JSON.parse(raw);
+        if (!obj || !obj.categories) return null;
+        return obj; // { ts, categories }
+    } catch (e) { return null; }
+}
+
+function applyGalleryData(categories) {
+    driveData = categories;
+    renderMainFilterButtons();
+    renderAllGalleryItems();
+    updateHomeStats();
+}
+
+function fetchGalleryFromNetwork(showLoader) {
+    if (showLoader) showGalleryLoading(true);
+    hideGalleryError();
+
+    // Add 15 second timeout to prevent infinite loading
+    var timeout = setTimeout(function() {
+        var loading = document.getElementById('gallery-loading');
+        if (loading && loading.style.display !== 'none') {
+            showGalleryLoading(false);
+            if (Object.keys(driveData).length === 0) {
+                showGalleryError('Network timeout — please check your connection or try again');
+            }
+        }
+    }, 15000);
+
+    fetch(SCRIPT_URL)
+        .then(function (r) {
+            clearTimeout(timeout);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (data) {
+            clearTimeout(timeout);
+            showGalleryLoading(false);
+            if (!data.success) throw new Error(data.error || 'Script error');
+            saveGalleryCache(data.categories);
+            applyGalleryData(data.categories);
+        })
+        .catch(function (err) {
+            clearTimeout(timeout);
+            showGalleryLoading(false);
+            // Only show error if we don't already have data shown
+            if (Object.keys(driveData).length === 0) {
+                showGalleryError('Could not load gallery: ' + err.message);
+            }
+        });
+}
+
 function loadGalleryFromDrive() {
     if (typeof SCRIPT_URL === 'undefined' || SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
         showGalleryError('⚙️ Setup needed: paste your Apps Script URL into index.html');
         return;
     }
 
-    showGalleryLoading(true);
-    hideGalleryError();
+    var cached = loadGalleryCache();
+    var cacheAge = cached ? (Date.now() - cached.ts) : Infinity;
 
-    fetch(SCRIPT_URL)
-        .then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-        })
-        .then(function (data) {
-            showGalleryLoading(false);
-            if (!data.success) throw new Error(data.error || 'Script error');
-            driveData = data.categories;
-            renderMainFilterButtons();
-            renderAllGalleryItems();
-            updateHomeStats();
-        })
-        .catch(function (err) {
-            showGalleryLoading(false);
-            showGalleryError('Could not load gallery: ' + err.message);
-        });
+    if (cached && cacheAge < GALLERY_CACHE_TTL) {
+        // Cache is fresh — show immediately, refresh silently in background
+        applyGalleryData(cached.categories);
+        // Prefetch in background in worker on idle
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(function() { fetchGalleryInWorker(false); });
+        } else {
+            setTimeout(function() { fetchGalleryInWorker(false); }, 2000);
+        }
+    } else if (cached) {
+        // Cache is stale — show it right away then refresh
+        applyGalleryData(cached.categories);
+        fetchGalleryInWorker(false);
+    } else {
+        // No cache at all — show loader and fetch
+        fetchGalleryInWorker(true);
+    }
 }
 
 // —— Build TOP-LEVEL category buttons (mirrors Drive root folders) ——
@@ -171,7 +294,7 @@ function onMainCatClick(catName, clickedBtn) {
 function filterBySubCat(parent, sub) {
     var items = document.querySelectorAll('.gitem');
     var visible = 0;
-    items.forEach(function (item, i) {
+    items.forEach(function (item) {
         var itemParent = item.getAttribute('data-parent');
         var itemSub = item.getAttribute('data-sub');
         var show = false;
@@ -185,20 +308,25 @@ function filterBySubCat(parent, sub) {
         }
 
         if (show) {
+            var delay = visible * 0.03; // Use 'visible' count for stagger, not 'i'
             visible++;
+            
             item.classList.remove('hide');
             item.style.opacity = '0';
-            item.style.transform = 'scale(0.88)';
-            item.style.transition = 'opacity .35s ease ' + (i * 0.03) + 's, transform .35s ease ' + (i * 0.03) + 's';
+            item.style.transform = 'scale(0.95)';
+            item.style.transition = 'opacity .3s ease ' + delay + 's, transform .3s ease ' + delay + 's';
+            
             requestAnimationFrame(function () {
                 requestAnimationFrame(function () {
                     item.style.opacity = '1';
-                    item.style.transform = '';
+                    item.style.transform = 'scale(1)';
                 });
             });
         } else {
             item.style.opacity = '0';
-            setTimeout(function () { item.classList.add('hide'); }, 360);
+            item.style.transform = 'scale(0.95)';
+            // Faster hide
+            setTimeout(function () { item.classList.add('hide'); }, 200);
         }
     });
 
@@ -216,6 +344,7 @@ function renderAllGalleryItems() {
     var gallery = document.getElementById('gallery');
     gallery.querySelectorAll('.gitem').forEach(function (el) { el.remove(); });
 
+    _gitemCount = 0; // reset eager load counter on each render
     var totalCount = 0;
     var fragment = document.createDocumentFragment();
 
@@ -249,6 +378,10 @@ function renderAllGalleryItems() {
     rebuildLbItems();
 }
 
+// Counter for eager-loading the first N items
+var _gitemCount = 0;
+var EAGER_LOAD_COUNT = 16; // first 16 images load immediately (faster initial load), rest lazy
+
 // Build a single gallery item element
 function makeGitem(item, parent, sub) {
     var div = document.createElement('div');
@@ -260,16 +393,34 @@ function makeGitem(item, parent, sub) {
     div.onclick = function () { openLightbox(div); };
 
     var img = document.createElement('img');
-    // Use data-src instead of src — real URL loaded by IntersectionObserver
-    img.setAttribute('data-src', item.url);
-    img.setAttribute('data-fallback',
-        'https://drive.google.com/thumbnail?id=' + item.id + '&sz=w800');
+    // Use thumbnail (w400) for grid — faster load; full URL stored separately for lightbox
+    var thumbUrl = 'https://drive.google.com/thumbnail?id=' + item.id + '&sz=w400';
     img.alt = sub;
-    img.src = '';  // blank until observed
-    img.classList.add('lazy');
+    img.classList.add('img-loading');
 
-    // Observe this image for lazy loading
-    observeImg(img);
+    if (_gitemCount < EAGER_LOAD_COUNT) {
+        // Eager load — show immediately
+        img.src = thumbUrl;
+        img.onload = function () {
+            img.classList.remove('img-loading');
+            img.classList.add('img-loaded');
+            div.classList.add('loaded');   // hides shimmer
+        };
+        img.onerror = function () {
+            img.classList.remove('img-loading');
+            div.classList.add('loaded');
+            img.onerror = null;
+        };
+    } else {
+        // Lazy load for the rest
+        img.setAttribute('data-src', thumbUrl);
+        img.setAttribute('data-fallback', thumbUrl);
+        img.src = '';
+        img.classList.add('lazy');
+        observeImg(img);
+    }
+
+    _gitemCount++;
 
     var hover = document.createElement('div');
     hover.className = 'ghover';
@@ -281,9 +432,29 @@ function makeGitem(item, parent, sub) {
 }
 
 function showGalleryLoading(show) {
-    var el = document.getElementById('gallery-loading');
-    if (!el) return;
-    el.style.display = show ? 'flex' : 'none';
+    var el      = document.getElementById('gallery-loading');
+    var gallery = document.getElementById('gallery');
+
+    if (show) {
+        // Show the centered spinner
+        if (el) el.style.display = 'flex';
+        // Also inject skeleton placeholder cards into the grid
+        if (gallery && !gallery.querySelector('.gitem-placeholder')) {
+            var frag = document.createDocumentFragment();
+            for (var i = 0; i < 12; i++) {
+                var ph = document.createElement('div');
+                ph.className = 'gitem gitem-placeholder';
+                frag.appendChild(ph);
+            }
+            gallery.insertBefore(frag, gallery.firstChild);
+        }
+    } else {
+        if (el) el.style.display = 'none';
+        // Remove skeleton cards
+        if (gallery) {
+            gallery.querySelectorAll('.gitem-placeholder').forEach(function (p) { p.remove(); });
+        }
+    }
 }
 
 function showGalleryError(msg) {
@@ -425,8 +596,8 @@ function rebuildLbItems() {
         // Prefer the original full-quality URL stored in data-src-full;
         // fall back to the already-loaded src if already displayed.
         var src = el.getAttribute('data-src-full') ||
-                  img.getAttribute('data-src') ||
-                  img.src;
+            img.getAttribute('data-src') ||
+            img.src;
         return {
             src: src,
             title: el.querySelector('p') ? el.querySelector('p').textContent : '',
@@ -466,9 +637,21 @@ function renderLightbox() {
     var item = lbItems[lbIndex];
     if (!item) return;
 
+    var lb  = document.getElementById('lightbox');
     var img = document.getElementById('lb-img');
+
+    // Show spinner while new image loads
+    lb.classList.add('is-loading');
     img.style.opacity = '0';
-    img.onload = function () { img.style.opacity = '1'; };
+
+    img.onload = function () {
+        lb.classList.remove('is-loading');
+        img.style.opacity = '1';
+    };
+    img.onerror = function () {
+        lb.classList.remove('is-loading');
+        img.style.opacity = '1';
+    };
     img.src = item.src;
 
     document.getElementById('lb-title').textContent = item.title;
@@ -591,8 +774,8 @@ function initSectionSwipe() {
         while (origin && origin !== main) {
             if (origin.classList &&
                 (origin.classList.contains('cat-bar') ||
-                 origin.classList.contains('sub-cat-bar') ||
-                 origin.classList.contains('pricing-grid'))) {
+                    origin.classList.contains('sub-cat-bar') ||
+                    origin.classList.contains('pricing-grid'))) {
                 return;
             }
             origin = origin.parentElement;
@@ -661,10 +844,10 @@ function loadQueueFromDrive() {
 
 
 function renderQueue(queue) {
-    var content   = document.getElementById('queue-content');
-    var tbody     = document.getElementById('queue-tbody');
-    var emptyEl   = document.getElementById('queue-empty');
-    var countEl   = document.getElementById('queue-count');
+    var content = document.getElementById('queue-content');
+    var tbody = document.getElementById('queue-tbody');
+    var emptyEl = document.getElementById('queue-empty');
+    var countEl = document.getElementById('queue-count');
     var updatedEl = document.getElementById('queue-updated');
     if (!content || !tbody) return;
 
@@ -682,28 +865,28 @@ function renderQueue(queue) {
     }
     if (emptyEl) emptyEl.classList.add('hide');
 
-    var waiting = queue.filter(function(q) { return q.status !== 'เสร็จแล้ว'; }).length;
+    var waiting = queue.filter(function (q) { return q.status !== 'เสร็จแล้ว'; }).length;
     if (countEl) countEl.textContent = 'คิวทั้งหมด ' + queue.length + ' งาน' +
         (waiting < queue.length ? ' (รออยู่ ' + waiting + ' งาน)' : '');
 
     var statusCfg = {
-        'รอคิว'     : { cls: 'sq-wait',  label: '⏳ รอคิว' },
-        'กำลังทำ'   : { cls: 'sq-doing', label: '✨ กำลังทำ' },
-        'ส่งแล้ว'    : { cls: 'sq-done',  label: '✓ ส่งแล้ว' }
+        'รอคิว': { cls: 'sq-wait', label: '⏳ รอคิว' },
+        'กำลังทำ': { cls: 'sq-doing', label: '✨ กำลังทำ' },
+        'ส่งแล้ว': { cls: 'sq-done', label: '✓ ส่งแล้ว' }
     };
 
     queue.forEach(function (item) {
-        var st  = statusCfg[item.status] || { cls: 'sq-wait', label: item.status || 'รอคิว' };
-        var tr  = document.createElement('tr');
+        var st = statusCfg[item.status] || { cls: 'sq-wait', label: item.status || 'รอคิว' };
+        var tr = document.createElement('tr');
         if (item.status === 'ส่งแล้ว') tr.classList.add('row-done');
         if (item.status === 'กำลังทำ') tr.classList.add('row-doing');
 
         tr.innerHTML =
             '<td><span class="q-num">' + escHtml('' + item.number) + '</span></td>' +
-            '<td class="q-name">'  + escHtml(item.name)  + '</td>' +
-            '<td class="q-type">'  + escHtml(item.type)  + '</td>' +
+            '<td class="q-name">' + escHtml(item.name) + '</td>' +
+            '<td class="q-type">' + escHtml(item.type) + '</td>' +
             '<td><span class="q-badge ' + st.cls + '">' + st.label + '</span></td>' +
-            '<td class="q-note">'  + escHtml(item.note)  + '</td>';
+            '<td class="q-note">' + escHtml(item.note) + '</td>';
 
         tbody.appendChild(tr);
     });
@@ -724,7 +907,7 @@ function showQueueLoading(show) {
     if (el) el.style.display = show ? 'flex' : 'none';
 }
 function showQueueError(msg) {
-    var el  = document.getElementById('queue-error');
+    var el = document.getElementById('queue-error');
     var txt = document.getElementById('queue-error-msg');
     if (!el) return;
     if (txt) txt.textContent = msg;
@@ -755,7 +938,7 @@ function scrollToTop() {
 // Show/hide Back to Top button based on scroll position
 (function () {
     function initBackToTop() {
-        var btn  = document.getElementById('back-to-top');
+        var btn = document.getElementById('back-to-top');
         var main = document.querySelector('.main');
         if (!btn || !main) return;
 
@@ -783,6 +966,9 @@ document.addEventListener('DOMContentLoaded', function () {
         lucide.createIcons();
     }
 
+    // Set up Web Worker for gallery loading (non-blocking)
+    initGalleryWorker();
+
     // Set up Intersection Observer for lazy loading
     initLazyObserver();
 
@@ -793,5 +979,4 @@ document.addEventListener('DOMContentLoaded', function () {
     // Load gallery images from Google Drive
     loadGalleryFromDrive();
 });
-
 
