@@ -8,14 +8,17 @@
     <link rel="icon" type="image/jpeg" href="assets/wel+about.jpeg">
     <meta name="description"
         content="JUNE's cute illustration Example — Cartoon, Logo, Background & Decoration artwork">
+    <!-- Preload critical resources -->
+    <link rel="preload" href="assets/wel+about.jpeg" as="image">
+    <link rel="preload" href="assets/1.jpeg" as="image">
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Playfair+Display:ital,wght@1,700&display=swap"
         rel="stylesheet">
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Lucide Icons (defer = non-blocking) -->
+    <script src="https://unpkg.com/lucide@latest" defer></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
@@ -246,7 +249,7 @@
         </div>
         <div class="welcome-card">
             <div class="welcome-avatar">
-                <img src="assets/wel+about.jpeg" alt="JUNE art" id="welcome-avatar-img">
+                <img src="assets/wel+about.jpeg" alt="JUNE art" id="welcome-avatar-img" fetchpriority="high">
             </div>
             <div class="welcome-text">
                 <p class="welcome-hey">✿ hello hello ✿</p>
@@ -273,7 +276,7 @@
         <!-- ── MOBILE HEADER ── -->
         <header class="mobile-header" id="mobile-header">
             <div class="mhd-brand">
-                <div class="mhd-avatar"><img src="assets/wel+about.jpeg" alt="JUNE"></div>
+                <div class="mhd-avatar"><img src="assets/wel+about.jpeg" alt="JUNE" loading="lazy"></div>
                 <div>
                     <strong class="mhd-name">JUNE <span class="c-flower">✿</span></strong>
                     <span class="mhd-sub">Visual Artist</span>
@@ -295,7 +298,7 @@
         <aside class="sidebar">
             <div class="sidebar-top">
                 <a href="javascript:void(0)" class="sidebar-brand" onclick="goTo('home')">
-                    <div class="brand-avatar"><img src="assets/wel+about.jpeg" alt="JUNE"></div>
+                    <div class="brand-avatar"><img src="assets/wel+about.jpeg" alt="JUNE" loading="lazy"></div>
                     <div>
                         <strong class="brand-name">JUNE <span class="c-flower">✿</span></strong>
                         <span class="brand-sub">Visual Artist</span>
@@ -326,20 +329,6 @@
                 </a>
             </nav>
 
-            <div class="sidebar-social">
-                <p class="social-lbl">find me ♡</p>
-                <div class="social-row">
-                    <a href="https://www.facebook.com/people/ilianastore%E6%84%9B/61585617750739/" target="_blank"
-                        class="social-pill" title="Facebook"><i class="fa-brands fa-facebook"></i></a>
-                    <a href="https://lin.ee/pILPdlrZ" target="_blank" class="social-pill" title="LINE"><i
-                            class="fa-brands fa-line"></i></a>
-                    <a href="https://www.instagram.com/ihomxse.13?igsh=MTFxZjdyenVneTk1&utm_source=qr/" target="_blank"
-                        class="social-pill" title="Instagram">
-                        <i class="fa-brands fa-instagram"></i>
-                    </a>
-                </div>
-            </div>
-
         </aside>
 
         <!-- MAIN CONTENT -->
@@ -367,9 +356,9 @@
                     </div>
                     <div class="home-right">
                         <div class="home-mosaic">
-                            <div class="mosaic-main"><img src="assets/1.jpeg" alt="Art 1"></div>
-                            <div class="mosaic-sm"><img src="assets/2.JPG" alt="Art 2"></div>
-                            <div class="mosaic-sm"><img src="assets/3.png" alt="Art 3"></div>
+                            <div class="mosaic-main"><img src="assets/1.jpeg" alt="Art 1" fetchpriority="high" width="800" height="960"></div>
+                            <div class="mosaic-sm"><img src="assets/2.JPG" alt="Art 2" fetchpriority="low" width="500" height="600"></div>
+                            <div class="mosaic-sm"><img src="assets/3.png" alt="Art 3" fetchpriority="low" width="500" height="600"></div>
                         </div>
                     </div>
                 </div>
@@ -812,6 +801,11 @@
         <button class="lb-close" onclick="closeLightbox()">✕</button>
         <button id="lb-prev" class="lb-nav lb-prev" onclick="lbNavigate(-1)">‹</button>
         <button id="lb-next" class="lb-nav lb-next" onclick="lbNavigate(1)">›</button>
+        <!-- Loading spinner -->
+        <div class="lb-spinner" id="lb-spinner">
+            <div class="lb-spinner-ring"></div>
+            <p>Loading ♡</p>
+        </div>
         <div class="lb-content">
             <img id="lb-img" src="" alt="">
             <div class="lb-caption">
