@@ -315,6 +315,10 @@
                     onclick="navigate('portfolio',this)">
                     <i data-lucide="palette" class="nav-icon"></i><span>Example</span>
                 </a>
+                <a href="javascript:void(0)" data-section="signstock" class="nav-link"
+                    onclick="navigate('signstock',this)">
+                    <i data-lucide="shapes" class="nav-icon"></i><span>Sign stock</span>
+                </a>
                 <a href="javascript:void(0)" data-section="pricing" class="nav-link" onclick="navigate('pricing',this)">
                     <i data-lucide="tag" class="nav-icon"></i><span>Pricing</span>
                 </a>
@@ -356,9 +360,12 @@
                     </div>
                     <div class="home-right">
                         <div class="home-mosaic">
-                            <div class="mosaic-main"><img src="assets/1.jpeg" alt="Art 1" fetchpriority="high" width="800" height="960"></div>
-                            <div class="mosaic-sm"><img src="assets/2.JPG" alt="Art 2" fetchpriority="low" width="500" height="600"></div>
-                            <div class="mosaic-sm"><img src="assets/3.png" alt="Art 3" fetchpriority="low" width="500" height="600"></div>
+                            <div class="mosaic-main"><img src="assets/1.jpeg" alt="Art 1" fetchpriority="high"
+                                    width="800" height="960"></div>
+                            <div class="mosaic-sm"><img src="assets/2.JPG" alt="Art 2" fetchpriority="low" width="500"
+                                    height="600"></div>
+                            <div class="mosaic-sm"><img src="assets/3.png" alt="Art 3" fetchpriority="low" width="500"
+                                    height="600"></div>
                         </div>
                     </div>
                 </div>
@@ -397,6 +404,30 @@
                     <!-- Gallery items rendered here dynamically -->
                 </div>
 
+            </section>
+            <!-- ── SIGN STOCK ── -->
+            <section id="section-signstock" class="section">
+                <div class="section-head">
+                    <h2>Storage <span class="c-flower">✿</span></h2>
+                    <p>Click on what you want to view <i data-lucide="heart" class="btn-inline-icon"></i></p>
+                </div>
+                <div class="cat-bar" id="cat-bar-signstock"></div>
+                <div class="gallery" id="gallery-signstock">
+                    <div class="gallery-empty hide" id="gallery-empty-signstock">
+                        <i data-lucide="sparkles"></i>
+                        <p>Coming Soon ♡</p>
+                    </div>
+                    <div class="gallery-loading" id="gallery-loading-signstock">
+                        <div class="gl-ring"></div>
+                        <p>Loading artworks ♡</p>
+                    </div>
+                    <div class="gallery-error hide" id="gallery-error-signstock">
+                        <i data-lucide="cloud-off"></i>
+                        <p id="gallery-error-msg-signstock">Could not load gallery.</p>
+                        <button class="btn-soft btn-sm" onclick="loadGalleryFromDrive(true, 'signstock')">Retry
+                            ↻</button>
+                    </div>
+                </div>
             </section>
 
             <!-- ── PRICING ── -->
@@ -772,6 +803,11 @@
                 onclick="mobileNavigate('portfolio', this)" id="mnav-portfolio">
                 <i data-lucide="palette" class="mnav-icon"></i>
                 <span>Example</span>
+            </a>
+            <a href="javascript:void(0)" class="mnav-item" data-section="signstock"
+                onclick="mobileNavigate('signstock', this)" id="mnav-signstock">
+                <i data-lucide="shapes" class="mnav-icon"></i>
+                <span>Sign</span>
             </a>
             <a href="javascript:void(0)" class="mnav-item" data-section="pricing"
                 onclick="mobileNavigate('pricing', this)" id="mnav-pricing">
